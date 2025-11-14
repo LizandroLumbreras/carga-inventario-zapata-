@@ -42,6 +42,10 @@
 </style>
 
 <script type="module">
+
+// =============================================================
+// FIREBASE
+// =============================================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { 
     getFirestore, doc, setDoc, collection, addDoc, serverTimestamp 
@@ -59,6 +63,10 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore();
 
+
+// =============================================================
+// BITÁCORA
+// =============================================================
 function log(texto) {
     const bit = document.getElementById("bitacora");
     bit.innerHTML += texto + "<br>";
@@ -66,6 +74,10 @@ function log(texto) {
     console.log(texto);
 }
 
+
+// =============================================================
+// PROCESAR EXCEL
+// =============================================================
 window.cargarExcel = function(event) {
     const archivo = event.target.files[0];
     if (!archivo) {
@@ -92,26 +104,44 @@ window.cargarExcel = function(event) {
 
         const productos = [];
 
+        // =============================================================
+        // PROCESAR TODAS LAS FILAS Y CONSTRUIR PRODUCTO COMPLETO
+        // =============================================================
         for (let i = 0; i < rows.length; i++) {
             const row = rows[i];
 
             log("Procesando fila " + (i+1) + ": " + JSON.stringify(row));
 
-            productos.push({
-                codigoBarra: row.codigobarras,          // CLAVE PROVSOFT
-                codigobarras: row.codigobarras,        // ORIGINAL
+            const producto = {
+                codigoBarra: row.codigobarras,
+                codigobarras: row.codigobarras,
                 descripcion: row.descripcion,
                 cantidad: Number(row.cantidad),
-                fecha: row.fecha,
+                fecha: row.fecha ?? "",
                 costoSinImpuesto: Number(row.costo_sin_impuesto),
                 costo_sin_impuesto: Number(row.costo_sin_impuesto),
-                linea: row.linea,
-                movimiento: row.movimiento
-            });
+
+                // COLUMNA CON ESPACIO AL FINAL
+                linea: row["linea "] ?? row.linea ?? "",
+                movimiento: row["movimiento "] ?? row.movimiento ?? ""
+            };
+
+            // =============================================================
+            // VALIDACIÓN: DETECTAR UNDEFINED
+            // =============================================================
+            for (const campo in producto) {
+                if (producto[campo] === undefined) {
+                    log("❌ ERROR: campo '" + campo + "' viene undefined en fila " + (i+1));
+                    log("Fila completa: " + JSON.stringify(row));
+                    alert("El campo '"+campo+"' está undefined en la fila " + (i+1));
+                    return;
+                }
+            }
+
+            productos.push(producto);
 
             actualizarBarra(i + 1, rows.length);
-
-            await new Promise(resolve => setTimeout(resolve, 5));
+            await new Promise(resolve => setTimeout(resolve, 10));
         }
 
         log("Total productos convertidos: " + productos.length);
@@ -126,12 +156,20 @@ window.cargarExcel = function(event) {
     reader.readAsArrayBuffer(archivo);
 };
 
+
+// =============================================================
+// BARRA DE PROGRESO
+// =============================================================
 function actualizarBarra(actual, total) {
     const porcentaje = Math.round((actual / total) * 100);
     document.getElementById("progressBar").style.width = porcentaje + "%";
     log("Progreso: " + porcentaje + "%");
 }
 
+
+// =============================================================
+// FIREBASE UPLOAD
+// =============================================================
 async function registrarInventarioInicial(productos) {
 
     log("Creando almacén almacen_zapataV2...");
@@ -160,6 +198,7 @@ async function registrarInventarioInicial(productos) {
     log("Inventario inicial guardado con ID: " + docRef.id);
     log("Carga finalizada.");
 }
+
 </script>
 
 </head>
