@@ -172,11 +172,11 @@ function actualizarBarra(actual, total) {
 // =============================================================
 async function registrarInventarioInicial(productos) {
 
-    log("Creando almacén almacen_zapataV2...");
+    log("Usando almacén almacen_zapata...");
 
-    const refAlmacen = doc(db, "almacenes", "almacen_zapataV2");
+    const refAlmacen = doc(db, "almacenes", "almacen_zapata");
     await setDoc(refAlmacen, {
-        nombre: "Almacén Zapata V2",
+        nombre: "Almacén Zapata",
         creadoEn: serverTimestamp(),
         tipo: "almacen_fisico",
         estado: "activo"
@@ -186,7 +186,8 @@ async function registrarInventarioInicial(productos) {
 
     log("Creando documento de inventario inicial...");
 
-    const entradasRef = collection(db, "almacenes", "almacen_zapataV2", "entradas");
+    // === ESTA ES LA RUTA CORRECTA QUE PEDISTE ===
+    const entradasRef = collection(db, "almacenes", "almacen_zapata", "entradas");
 
     const docRef = await addDoc(entradasRef, {
         fecha: serverTimestamp(),
