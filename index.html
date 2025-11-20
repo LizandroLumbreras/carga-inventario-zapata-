@@ -1,221 +1,214 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<title>Cargar Inventario Inicial – Almacén Zapata V2</title>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-
-<style>
-    #progressContainer {
-        width: 100%;
-        background: #ccc;
-        height: 20px;
-        border-radius: 10px;
-        margin-top: 20px;
-        display: none;
+  <meta charset="UTF-8">
+  <title>Actualizar Inventario con Bitácora – Zapata</title>
+  <style>
+    body {
+      font-family: 'Poppins', sans-serif;
+      background: linear-gradient(to right, #00416A, #E4E5E6);
+      color: #fff;
+      text-align: center;
+      padding: 40px;
     }
-    #progressBar {
-        width: 0%;
-        height: 100%;
-        background: #00416A;
-        border-radius: 10px;
-        transition: width 0.2s linear;
+    .card {
+      background: rgba(255,255,255,0.1);
+      border-radius: 12px;
+      padding: 25px;
+      max-width: 550px;
+      margin: auto;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     }
-    #bitacora {
-        margin-top: 20px;
-        padding: 10px;
-        background: #f4f4f4;
-        height: 300px;
-        overflow-y: scroll;
-        border: 1px solid #aaa;
-        font-family: Consolas, monospace;
-        font-size: 14px;
+    input[type=file] {
+      margin-top: 15px;
+      padding: 8px;
+      background: #fff;
+      border-radius: 6px;
+      color: #111;
     }
-    #mensajeFinal {
-        font-size: 20px;
-        margin-top: 20px;
-        display: none;
-        color: green;
-        font-weight: bold;
+    button {
+      margin-top: 20px;
+      padding: 10px 25px;
+      background: #0c6cbd;
+      border: none;
+      color: white;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: 0.3s;
     }
-</style>
-
-<script type="module">
-
-// =============================================================
-// FIREBASE
-// =============================================================
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { 
-    getFirestore, doc, setDoc, collection, addDoc, serverTimestamp 
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-
-const firebaseConfig = {
-  apiKey: "AIzaSyCK5nb6u2CGRJ8AB1aPlRn54b97bdeAFeM",
-  authDomain: "inventariopv-643f1.firebaseapp.com",
-  projectId: "inventariopv-643f1",
-  storageBucket: "inventariopv-643f1.firebasestorage.app",
-  messagingSenderId: "96242533231",
-  appId: "1:96242533231:web:aae75a18fbaf9840529e9a"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore();
-
-
-// =============================================================
-// BITÁCORA
-// =============================================================
-function log(texto) {
-    const bit = document.getElementById("bitacora");
-    bit.innerHTML += texto + "<br>";
-    bit.scrollTop = bit.scrollHeight;
-    console.log(texto);
-}
-
-
-// =============================================================
-// PROCESAR EXCEL
-// =============================================================
-window.cargarExcel = function(event) {
-    const archivo = event.target.files[0];
-    if (!archivo) {
-        log("No se seleccionó archivo.");
-        return;
+    button:hover { background: #1e88e5; }
+    .progress-container {
+      width: 100%;
+      background: rgba(255,255,255,0.2);
+      border-radius: 8px;
+      height: 22px;
+      margin-top: 25px;
+      overflow: hidden;
     }
-
-    log("Leyendo archivo: " + archivo.name);
-
-    const reader = new FileReader();
-
-    reader.onload = async function(e) {
-        log("Archivo cargado en memoria, convirtiendo...");
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: "array" });
-
-        const hoja = workbook.Sheets[workbook.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(hoja);
-
-        log("Total de líneas encontradas en Excel: " + rows.length);
-
-        document.getElementById("progressContainer").style.display = "block";
-        document.getElementById("mensajeFinal").style.display = "none";
-
-        const productos = [];
-
-        // =============================================================
-        // PROCESAR TODAS LAS FILAS Y CONSTRUIR PRODUCTO COMPLETO
-        // =============================================================
-        for (let i = 0; i < rows.length; i++) {
-            const row = rows[i];
-
-            log("Procesando fila " + (i+1) + ": " + JSON.stringify(row));
-
-            const producto = {
-                codigoBarra: row.codigobarras,
-                codigobarras: row.codigobarras,
-                descripcion: row.descripcion,
-                cantidad: Number(row.cantidad),
-                fecha: row.fecha ?? "",
-                costoSinImpuesto: Number(row.costo_sin_impuesto),
-                costo_sin_impuesto: Number(row.costo_sin_impuesto),
-
-                // COLUMNA CON ESPACIO AL FINAL
-                linea: row["linea "] ?? row.linea ?? "",
-                movimiento: row["movimiento "] ?? row.movimiento ?? ""
-            };
-
-            // =============================================================
-            // VALIDACIÓN: DETECTAR UNDEFINED
-            // =============================================================
-            for (const campo in producto) {
-                if (producto[campo] === undefined) {
-                    log("❌ ERROR: campo '" + campo + "' viene undefined en fila " + (i+1));
-                    log("Fila completa: " + JSON.stringify(row));
-                    alert("El campo '"+campo+"' está undefined en la fila " + (i+1));
-                    return;
-                }
-            }
-
-            productos.push(producto);
-
-            actualizarBarra(i + 1, rows.length);
-            await new Promise(resolve => setTimeout(resolve, 10));
-        }
-
-        log("Total productos convertidos: " + productos.length);
-
-        await registrarInventarioInicial(productos);
-
-        document.getElementById("mensajeFinal").innerHTML = 
-          "✔ Inventario inicial cargado correctamente (" + productos.length + " productos)";
-        document.getElementById("mensajeFinal").style.display = "block";
-    };
-
-    reader.readAsArrayBuffer(archivo);
-};
-
-
-// =============================================================
-// BARRA DE PROGRESO
-// =============================================================
-function actualizarBarra(actual, total) {
-    const porcentaje = Math.round((actual / total) * 100);
-    document.getElementById("progressBar").style.width = porcentaje + "%";
-    log("Progreso: " + porcentaje + "%");
-}
-
-
-// =============================================================
-// FIREBASE UPLOAD
-// =============================================================
-async function registrarInventarioInicial(productos) {
-
-    log("Usando almacén almacen_zapata...");
-
-    const refAlmacen = doc(db, "almacenes", "almacen_zapata");
-    await setDoc(refAlmacen, {
-        nombre: "Almacén Zapata",
-        creadoEn: serverTimestamp(),
-        tipo: "almacen_fisico",
-        estado: "activo"
-    }, { merge: true });
-
-    log("Almacén verificado/creado.");
-
-    log("Creando documento de inventario inicial...");
-
-    // === ESTA ES LA RUTA CORRECTA QUE PEDISTE ===
-    const entradasRef = collection(db, "almacenes", "almacen_zapata", "entradas");
-
-    const docRef = await addDoc(entradasRef, {
-        fecha: serverTimestamp(),
-        tipo: "inventario_inicial",
-        usuario: "Lizandro",
-        productos: productos
-    });
-
-    log("Inventario inicial guardado con ID: " + docRef.id);
-    log("Carga finalizada.");
-}
-
-</script>
-
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: #00e676;
+      transition: width 0.2s;
+    }
+    #status { margin-top: 15px; font-weight: 600; color: #ffeb3b; }
+    #bitacora { text-align: left; margin-top: 25px; background: rgba(255,255,255,0.15); padding: 10px; border-radius: 8px; font-size: 13px; }
+    #bitacora h3 { margin: 10px 0 5px; font-size: 15px; color: #ffeb3b; }
+    .ok { color: #00e676; }
+    .warn { color: #ffb74d; }
+    .err { color: #ff5252; }
+  </style>
 </head>
 <body>
+  <div class="card">
+    <h2>Actualizar inventario solo si hay cambios</h2>
+    <p>Sube un Excel con columnas: <b>codigo, linea, descripcion, cantidad, costo</b></p>
+    <input type="file" id="file" accept=".xlsx,.xls"><br>
+    <button id="btnCargar">Cargar cambios</button>
+    <div class="progress-container">
+      <div id="progressBar" class="progress-bar"></div>
+    </div>
+    <p id="status"></p>
+    <button id="btnExportar" style="display:none;background:#43a047;">Descargar Bitácora</button>
+    <div id="bitacora"></div>
+  </div>
 
-<h2>Cargar Inventario Inicial – Almacén Zapata V2</h2>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { 
+    getFirestore, doc, getDoc, updateDoc, setDoc,
+    collection, query, where, getDocs
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import * as XLSX from "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm";
 
-<input type="file" accept=".xlsx,.xls" onchange="cargarExcel(event)">
+  // === 🔥 CONFIGURACIÓN FIREBASE ===
+  const firebaseConfig = {
+    apiKey: "AIzaSyCK5nb6u2CGRJ8AB1aPlRn54b97bdeAFeM",
+    authDomain: "inventariopv-643f1.firebaseapp.com",
+    projectId: "inventariopv-643f1",
+    storageBucket: "inventariopv-643f1.firebasestorage.app",
+    messagingSenderId: "96242533231",
+    appId: "1:96242533231:web:aae75a18fbaf9840529e9a"
+  };
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
 
-<div id="progressContainer">
-    <div id="progressBar"></div>
-</div>
+  let rows = [];
+  let bitacoraCambios = [];
 
-<div id="bitacora"></div>
+  // === 📦 Leer archivo Excel ===
+  document.getElementById("file").addEventListener("change", async e => {
+    const file = e.target.files[0];
+    if (!file) return alert("Selecciona un archivo Excel.");
+    const data = await file.arrayBuffer();
+    const workbook = XLSX.read(data);
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    rows = XLSX.utils.sheet_to_json(sheet);
+    document.getElementById("status").textContent = `Archivo cargado: ${rows.length} productos detectados.`;
+  });
 
-<div id="mensajeFinal"></div>
+  // === 🚀 Procesar actualización ===
+  document.getElementById("btnCargar").addEventListener("click", async () => {
+    if (rows.length === 0) return alert("Primero selecciona un archivo Excel válido.");
 
+    bitacoraCambios = [];
+    let actualizados = 0, sinCambios = 0, noExisten = 0;
+    const progressBar = document.getElementById("progressBar");
+    const status = document.getElementById("status");
+    const bitacora = document.getElementById("bitacora");
+    bitacora.innerHTML = "";
+
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      const codigo = (r.codigo || "").toString().trim();
+      if (!codigo) continue;
+
+      try {
+        // ✅ Buscar por campo "codigo" (no por ID)
+        const q = query(collection(db, "almacenes", "almacen_zapata", "entradas"), where("codigo", "==", codigo));
+        const querySnap = await getDocs(q);
+
+if (querySnap.empty) {
+  // 🔹 Crear nuevo documento si no existe
+  const nuevaRef = doc(collection(db, "almacenes", "almacen_zapata", "entradas"));
+  const nuevoDoc = {
+    codigo: codigo,
+    linea: r.linea || "",
+    descripcion: r.descripcion || "",
+    cantidad: Number(r.cantidad) || 0,
+    costo: Number(r.costo) || 0,
+    fechaCreacion: new Date().toISOString()
+  };
+  await setDoc(nuevaRef, nuevoDoc);
+
+  noExisten++;
+  bitacoraCambios.push({ codigo, estado: "CREADO" });
+  continue;
+}
+
+
+        const ref = querySnap.docs[0].ref;
+        const dataActual = querySnap.docs[0].data();
+        const cambios = {};
+        const diferencias = [];
+
+        if (r.linea && r.linea !== dataActual.linea) { cambios.linea = r.linea; diferencias.push("linea"); }
+        if (r.descripcion && r.descripcion !== dataActual.descripcion) { cambios.descripcion = r.descripcion; diferencias.push("descripcion"); }
+        if (r.cantidad && Number(r.cantidad) !== Number(dataActual.cantidad)) { cambios.cantidad = Number(r.cantidad); diferencias.push("cantidad"); }
+        if (r.costo && Number(r.costo) !== Number(dataActual.costo)) { cambios.costo = Number(r.costo); diferencias.push("costo"); }
+
+        if (Object.keys(cambios).length > 0) {
+          await updateDoc(ref, cambios);
+          actualizados++;
+          bitacoraCambios.push({ codigo, estado: "ACTUALIZADO", cambios: diferencias.join(", ") });
+        } else {
+          sinCambios++;
+          bitacoraCambios.push({ codigo, estado: "SIN CAMBIOS" });
+        }
+
+      } catch (err) {
+        console.error("Error con código:", codigo, err);
+      }
+
+      const progreso = Math.round(((i + 1) / rows.length) * 100);
+      progressBar.style.width = progreso + "%";
+      status.textContent = `Procesando ${i + 1}/${rows.length} ... ${progreso}%`;
+      await new Promise(res => setTimeout(res, 30));
+    }
+
+    // === Mostrar resumen ===
+    status.innerHTML = `
+      ✅ <b>${actualizados}</b> actualizados<br>
+      📦 <b>${sinCambios}</b> sin cambios<br>
+      ❌ <b>${noExisten}</b> no encontrados
+    `;
+    progressBar.style.background = "#00e676";
+
+    const ok = bitacoraCambios.filter(b => b.estado === "ACTUALIZADO");
+    const warn = bitacoraCambios.filter(b => b.estado === "SIN CAMBIOS");
+    const err = bitacoraCambios.filter(b => b.estado === "NO ENCONTRADO");
+
+    bitacora.innerHTML = `
+      <h3>✅ Actualizados (${ok.length})</h3>
+      <div class="ok">${ok.map(b => `${b.codigo} (${b.cambios})`).join("<br>") || "Ninguno"}</div>
+      <h3>📦 Sin cambios (${warn.length})</h3>
+      <div class="warn">${warn.map(b => b.codigo).join("<br>") || "Ninguno"}</div>
+      <h3>❌ No encontrados (${err.length})</h3>
+      <div class="err">${err.map(b => b.codigo).join("<br>") || "Ninguno"}</div>
+    `;
+
+    document.getElementById("btnExportar").style.display = "inline-block";
+  });
+
+  // === 📤 Exportar bitácora a Excel ===
+  document.getElementById("btnExportar").addEventListener("click", () => {
+    if (bitacoraCambios.length === 0) return alert("No hay bitácora para exportar.");
+    const hoja = XLSX.utils.json_to_sheet(bitacoraCambios);
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, "Bitacora");
+    XLSX.writeFile(libro, "Bitacora_Actualizacion.xlsx");
+  });
+</script>
 </body>
 </html>
